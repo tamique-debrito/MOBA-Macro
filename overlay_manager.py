@@ -1,36 +1,49 @@
 from enum import Enum
+import math
 import pygame
 
-from ui_utils import screen2coord
+from ui_utils import BLACK, WHITE, screen2coord
 
 # Initialize Pygame
 pygame.init()
+
+CONSOLIDATE_THRESHOLD = 40
 
 class OverlayType(Enum):
     MOVE_TO_LOCATION = 0
     ATTACK_LANE_ENTITY = 1
     STOP_ATTACKING_LANE_ENTITY = 2
     ENGAGE_COMBAT = 3
+    JOIN_COMBAT = 3.5
     DISENGAGE_COMBAT = 4
     SELECT_PLAYER = 5
+    START_RECALL = 6
+    STOP_RECALL = 7
 
 # Define some colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
 COLORS_BY_TYPE = {
     OverlayType.ATTACK_LANE_ENTITY: (255, 0, 0),
     OverlayType.ENGAGE_COMBAT: (255, 0, 0),
+    OverlayType.JOIN_COMBAT: (255, 0, 0),
+    OverlayType.DISENGAGE_COMBAT: (0, 255, 255),
     OverlayType.MOVE_TO_LOCATION: (0, 255, 0),
-    OverlayType.STOP_ATTACKING_LANE_ENTITY: (0, 0, 255),
-    OverlayType.DISENGAGE_COMBAT: (0, 0, 255),
+    OverlayType.STOP_ATTACKING_LANE_ENTITY: (0, 255, 255),
+    OverlayType.START_RECALL: (0, 0, 255),
+    OverlayType.STOP_RECALL: (0, 0, 255),
 }
 TEXT_BY_TYPE = {
-    OverlayType.ATTACK_LANE_ENTITY: "#",
-    OverlayType.ENGAGE_COMBAT: "!!!",
-    OverlayType.MOVE_TO_LOCATION: "v",
-    OverlayType.STOP_ATTACKING_LANE_ENTITY: "--",
-    OverlayType.DISENGAGE_COMBAT: "/ \\",
+    OverlayType.ATTACK_LANE_ENTITY: "⛏",
+    OverlayType.ENGAGE_COMBAT: "⚔",
+    OverlayType.JOIN_COMBAT: "+⚔",
+    OverlayType.MOVE_TO_LOCATION: "📌",
+    OverlayType.STOP_ATTACKING_LANE_ENTITY: "x⛏",
+    OverlayType.DISENGAGE_COMBAT: "x⚔",
+    OverlayType.START_RECALL: "✨",
+    OverlayType.STOP_RECALL: "x✨",
 }
+
+SYMBOL_FONT = pygame.font.Font("seguisym.ttf", 16)
+BOX_SIZE = 25
 
 class OverlayItem:
     def __init__(self, position, item_type, callback, name=''):
@@ -38,27 +51,29 @@ class OverlayItem:
         self.type = item_type
         self.callback = callback
 
-    def render(self, surface):
+    def render(self, screen):
         raise NotImplementedError
 
     def contains_point(self, point):
         """Check if a point (x, y) is inside this item."""
         raise NotImplementedError
 
+    def __repr__(self) -> str:
+        return f"Overlay {self.type}, {self.position}"
+
 
 class Box(OverlayItem):
     def __init__(self, position, size, item_type, callback, name=''):
         super().__init__(position, item_type, callback, name)
-        self.size = size  # (width, height)
+        self.size = (size, size)  # (width, height)
         self.rect = pygame.Rect(position[0], position[1], size, size)
 
-    def render(self, surface):
+    def render(self, screen):
         color = COLORS_BY_TYPE.get(self.type, BLACK)
         symbol = TEXT_BY_TYPE.get(self.type, "???")
-        pygame.draw.rect(surface, color, self.rect)
-        font = pygame.font.SysFont(None, 24)
-        text = font.render(symbol, True, WHITE)
-        surface.blit(text, (self.rect.x + 5, self.rect.y + 5))
+        pygame.draw.rect(screen, color, self.rect)
+        text = SYMBOL_FONT.render(symbol, True, WHITE)
+        screen.blit(text, (self.rect.x, self.rect.y))
 
     def contains_point(self, point):
         return self.rect.collidepoint(point)
@@ -69,17 +84,16 @@ class Circle(OverlayItem):
         super().__init__(position, item_type, callback, name)
         self.radius = radius
 
-    def render(self, surface):
+    def render(self, screen):
         if self.type == OverlayType.SELECT_PLAYER:
-            #pygame.draw.circle(surface, BLACK, self.position, 25, width=3)
+            #pygame.draw.circle(screen, BLACK, self.position, 25, width=3)
             return # Don't render this
         color = COLORS_BY_TYPE.get(self.type, BLACK)
         symbol = TEXT_BY_TYPE.get(self.type, "???")
-        pygame.draw.circle(surface, color, self.position, self.radius)
-        font = pygame.font.SysFont(None, 16)
-        text = font.render(symbol, True, WHITE)
+        pygame.draw.circle(screen, color, self.position, self.radius)
+        text = SYMBOL_FONT.render(symbol, True, WHITE)
         text_rect = text.get_rect(center=self.position)
-        surface.blit(text, text_rect)
+        screen.blit(text, text_rect)
 
     def contains_point(self, point):
         dx = point[0] - self.position[0]
@@ -87,15 +101,21 @@ class Circle(OverlayItem):
         return dx * dx + dy * dy <= self.radius * self.radius
 
 
+class Consolidation:
+    # Helper class for tracking boxes to consolidate together
+    def __init__(self, boxes, mean_coord):
+        self.boxes = boxes
+        self.mean_coord = mean_coord
+
 class OverlayManager:
     def __init__(self):
         self.items = []
 
-    def add_box(self, position, size, item_type, callback, name=''):
+    def add_box(self, position, item_type, callback, name='', size=BOX_SIZE):
         box = Box(position, size, item_type, callback, name)
         self.items.append(box)
 
-    def add_multiple_boxes(self, center_pos, size, types_and_callbacks, padding=3):
+    def add_multiple_boxes(self, center_pos, types_and_callbacks, size=BOX_SIZE, padding=3):
         """
         Adds multiple boxes evenly spaced around the center_pos.
 
@@ -121,7 +141,7 @@ class OverlayManager:
             position = (x, y)
             item_type, callback = types_and_callbacks[i]
             name = f"Box_{i+1}"
-            self.add_box(position, size, item_type, callback, name)
+            self.add_box(position, item_type, callback, name, size=size)
 
     def add_circle(self, position, radius, item_type, callback, name=''):
         circle = Circle(position, radius, item_type, callback, name)
@@ -139,6 +159,60 @@ class OverlayManager:
         """Clear all overlays"""
         self.items = []
 
-    def render_all(self, surface):
+    def render_all(self, screen):
         for item in self.items:
-            item.render(surface)
+            item.render(screen)
+    
+    def consolidate(self):
+        """
+        Consolidate boxes within the threshold distance, grouping by action type.
+        All callbacks of the grouped boxes are called in sequence when the new box is clicked.
+        """
+        all_types_consolidations = {}
+
+        for box in self.items:
+            if not isinstance(box, Box):
+                continue  # only process Box instances
+            
+            action_type = box.type
+            if action_type not in all_types_consolidations:
+                all_types_consolidations[action_type] = []
+
+            consolidations = all_types_consolidations[action_type]
+            found_consolidation = False
+
+            for consolidation in consolidations:
+                dist = math.dist(box.position, consolidation['mean_coord'])
+                if dist <= CONSOLIDATE_THRESHOLD:
+                    consolidation['boxes'].append(box)
+                    coords = [b.position for b in consolidation['boxes']]
+                    mean_x = sum(p[0] for p in coords) / len(coords)
+                    mean_y = sum(p[1] for p in coords) / len(coords)
+                    consolidation['mean_coord'] = (mean_x, mean_y)
+                    found_consolidation = True
+                    break
+
+            if not found_consolidation:
+                # Create a new consolidation for this box
+                consolidations.append({
+                    'boxes': [box],
+                    'mean_coord': box.position
+                })
+
+        # After grouping, create new consolidated boxes
+        new_items = []
+        for action_type, consolidations in all_types_consolidations.items():
+            for consolidation in consolidations:
+                boxes_in_group = consolidation['boxes']
+                mean_position = consolidation['mean_coord']
+                mean_position = (int(mean_position[0]), int(mean_position[1]))
+
+                def combined_callback(pos, boxes=boxes_in_group):
+                    for b in boxes:
+                        b.callback(pos)
+
+                new_box = Box(mean_position, BOX_SIZE, action_type, combined_callback, name="Combined box")
+                new_items.append(new_box)
+                #print(f"combined {[repr(b) for b in boxes_in_group]} into {repr(new_box)}")
+
+        self.items = new_items + [item for item in self.items if not isinstance(item, Box)]
