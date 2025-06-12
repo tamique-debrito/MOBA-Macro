@@ -1,5 +1,5 @@
 from typing import Sequence
-from CONSTANTS import DAMAGE_SIM_STEPS_PERIOD, DISENGAGE_SIM_STEPS, PLAYER_ATTACK_MISS_PROBABILITY
+from CONSTANTS import DAMAGE_APPLY_INTERVAL, DISENGAGE_TIME, PLAYER_ATTACK_MISS_PROBABILITY
 from player import Player
 from entity import Entity, EntityState, Team
 
@@ -26,8 +26,8 @@ class Combat:
         print("combat started")
 
     def add_entity(self, entity: Entity):
-        assert entity.state != EntityState.COMBAT, "Tried to add an Entity to Combat that is already in the COMBAT state"
-        entity.state = EntityState.COMBAT
+        assert entity._state != EntityState.COMBAT, "Tried to add an Entity to Combat that is already in the COMBAT state"
+        entity.set_state(EntityState.COMBAT)
         self.entities.append(entity)
         if isinstance(entity, Player):
             self.players_by_team[entity.team].append(entity)
@@ -35,20 +35,20 @@ class Combat:
     def start_disengage(self):
         if self.disengage_counter is not None:
             return
-        self.disengage_counter = DISENGAGE_SIM_STEPS
+        self.disengage_counter = DISENGAGE_TIME
     
     def cleanup(self):
         for e in self.entities:
-            if e.state == EntityState.COMBAT:
-                e.state = EntityState.NORMAL
+            if e._state == EntityState.COMBAT:
+                e.set_state(EntityState.NORMAL)
         print("combat ended")
 
-    def step(self, sim_step):
+    def step(self, sim_time):
         self.steps_run += 1
-        if sim_step % DAMAGE_SIM_STEPS_PERIOD != 0:
+        if sim_time % DAMAGE_APPLY_INTERVAL != 0:
             return self.active # Combat/damage is only applied every DAMAGE_TICK_TIME sim steps
         if self.disengage_counter is not None:
-            self.disengage_counter -= DAMAGE_SIM_STEPS_PERIOD
+            self.disengage_counter -= DAMAGE_APPLY_INTERVAL
             if self.disengage_counter <= 0:
                 self.active = False
 
@@ -56,15 +56,16 @@ class Combat:
         for entity in self.entities:
             if entity.is_alive():
                 enemies = self.players_by_team[entity.team.enemy()]
+                if len(enemies) == 0:
+                    print("got empty enemies list")
+                    break
                 if random.random() <= PLAYER_ATTACK_MISS_PROBABILITY:
                     continue # Incorporate some additional combat randomness via a miss probability
                 target = random.choice(enemies)
-                target.take_damage(entity.damage)
+                target.take_damage(entity.get_damage())
                 if not target.is_alive():
                     enemies.remove(target)
                     to_remove.append(target)
-                if len(enemies) == 0:
-                    break
         for target in to_remove:
             self.entities.remove(target)
         if len(self.players_by_team[Team.BLUE]) == 0 or len(self.players_by_team[Team.RED]) == 0:
