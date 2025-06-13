@@ -8,6 +8,7 @@ from typing import Optional, Tuple
 from CONSTANTS import COMBAT_START_THRESHOLD
 from combat import Combat
 from entity import EntityState, LaneEntity
+from item import ALL_ITEMS, Item
 from player import Player
 from sim import Simulator
 
@@ -20,6 +21,7 @@ class ActionType(Enum):
     ENGAGE_COMBAT = "ENGAGE_COMBAT"
     JOIN_COMBAT = "JOIN_COMBAT"
     DISENGAGE_COMBAT = "DISENGAGE_COMBAT"
+    BUY_ITEM = "BUY_ITEM"
 
 class DisplayLocationType(Enum):
     MAP_POSITION = 1
@@ -46,6 +48,8 @@ class ActionEntry:
         elif self.type in [ActionType.JOIN_COMBAT, ActionType.DISENGAGE_COMBAT]:
             assert self.combat
             self.display_location = DisplayLocation(DisplayLocationType.MAP_POSITION, self.combat.position)
+        elif self.type in [ActionType.BUY_ITEM]:
+            self.display_location = DisplayLocation(DisplayLocationType.DASH)
         else:
             assert False, f"Unhandled action types {self.type}"
 
@@ -76,6 +80,8 @@ class Controller:
             available = self.get_available_player_actions(p)
             if available is not None:
                 all_available.player_actions.append(available)
+
+        all_available.map_actions.append(ActionEntry(type=ActionType.BUY_ITEM))
         
         for combat in self.sim.map.combats:
             if combat.disengage_counter is not None:
@@ -134,5 +140,18 @@ class Controller:
         elif action.source_entry.type == ActionType.DISENGAGE_COMBAT:
             assert action.source_entry.combat is not None, "Tried to start disengage combat without combat specified"
             action.source_entry.combat.start_disengage()
+        elif action.source_entry.type == ActionType.BUY_ITEM:
+            item = ALL_ITEMS[input("enter item")]
+            if item is None:
+                print("could not find item")
+            player = self.sim.map.get_player_by_id(input("enter player id"))
+            if player is None:
+                print("could not find player")
+            elif not player.at_spawn():
+                print("could not buy item - not at spawn")
+            elif player.buy(item):
+                print("bought item")
+            else:
+                print("could not buy item - other reason")
         else:
             assert False, "Unknown action type specified"
