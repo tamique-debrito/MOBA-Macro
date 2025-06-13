@@ -1,5 +1,5 @@
 from typing import Sequence
-from CONSTANTS import DAMAGE_APPLY_INTERVAL, DISENGAGE_TIME, PLAYER_ATTACK_MISS_PROBABILITY
+from CONSTANTS import DISENGAGE_TIME, PLAYER_ATTACK_MISS_PROBABILITY
 from player import Player
 from entity import Entity, EntityState, Team
 
@@ -43,14 +43,14 @@ class Combat:
                 e.set_state(EntityState.NORMAL)
         print("combat ended")
 
-    def step(self, sim_time):
+    def step(self, time_delta, is_damage_tick):
         self.steps_run += 1
-        if sim_time % DAMAGE_APPLY_INTERVAL != 0:
-            return self.active # Combat/damage is only applied every DAMAGE_TICK_TIME sim steps
         if self.disengage_counter is not None:
-            self.disengage_counter -= DAMAGE_APPLY_INTERVAL
+            self.disengage_counter -= time_delta
             if self.disengage_counter <= 0:
                 self.active = False
+        if not is_damage_tick:
+            return self.active # Combat/damage is only applied every DAMAGE_TICK_TIME sim steps
 
         to_remove = []
         for entity in self.entities:

@@ -1,14 +1,32 @@
-PRESENCE_THRESHOLD = 20  # General distance threshold for things such as gold reward, xp, etc.
-COMBAT_THRESHOLD = 20 # Threshold to engage combat
-WAVE_COMBINE_THRESHOLD = 5
-TARGET_LOC_THRESHOLD = 3
+# Simulator
+SIM_STEPS_PER_SECOND = 5
 
-DAMAGE_SIM_STEPS_PERIOD = 5  # simulation steps per damage tick
-DISENGAGE_SIM_STEPS = 10 # simulation steps to disengage from combat
+# Map Distance Thresholds
+PRESENCE_THRESHOLD = 30  # General distance threshold for things such as gold reward, xp, etc.
+COMBAT_START_THRESHOLD = 30 # Threshold to engage combat
+COMBAT_INCLUDE_THRESHOLD = 45 # Threshold to include entities in combat
+WAVE_COMBINE_THRESHOLD = 15 # threshold for waves to be combined into one
+TARGET_LOC_THRESHOLD = 3 # threshold for being considered as arriving at a target location
 
-RESPAWN_STEPS = 25 # How many simulation steps before player respawn
+# Simulation step periods, intervals, and timers
+DAMAGE_APPLY_INTERVAL = 1  # time per damage tick in seconds
+DISENGAGE_TIME = 2 # seconds to disengage from combat
+RECALL_TIME = 8 # seconds for player to recall to spawn point
+RESPAWN_TIME = 10 # How many seconds before player respawn
 
+# Misc.
 PLAYER_ATTACK_MISS_PROBABILITY = 0.2
 
-MAP_X = 500
-MAP_Y = 500
+DEFAULT_WAVE_REWARD: int = 100
+TURRET_REWARD: int = 500
+
+
+# Dimensions
+MAP_X: int = 750
+MAP_Y: int = 750
+
+DASH_START_Y: int = MAP_Y
+DASH_HEIGHT: int = 100
+
+SCREEN_X: int = MAP_X
+SCREEN_Y: int = MAP_Y + DASH_HEIGHT

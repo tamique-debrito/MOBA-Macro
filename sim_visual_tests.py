@@ -1,7 +1,7 @@
 from time import sleep
 import pygame
 
-from CONSTANTS import COMBAT_THRESHOLD
+from CONSTANTS import COMBAT_START_THRESHOLD
 from entity import Path, Team, Turret, Wave
 from lane import LaneSimulator, SingleLaneSimulator, WaveWrapper
 from player import Player
@@ -55,7 +55,7 @@ def renderState(map: Map, screen):
   
   for combat in map.combats:
     c = coord2screen(combat.position)
-    pygame.draw.circle(screen, combat_color if not combat.disengage_counter else disengaging_combat_color, c, float(COMBAT_THRESHOLD), 4)
+    pygame.draw.circle(screen, combat_color if not combat.disengage_counter else disengaging_combat_color, c, float(COMBAT_START_THRESHOLD), 4)
 
   pygame.display.flip()
 
