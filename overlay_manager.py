@@ -2,14 +2,16 @@ from enum import Enum
 import math
 import pygame
 
+from CONSTANTS import DASH_START_Y, MAP_X, SCREEN_X
+from ui_utils import ACTION_SYMBOL_FONT, INFO_FONT
 from ui_utils import BLACK, WHITE, screen2coord
 
-# Initialize Pygame
-pygame.init()
-
-CONSOLIDATE_THRESHOLD = 40
+CONSOLIDATE_THRESHOLD: int = 40
+DASH_PADDING: int = 5
+DASH_SEPARATOR_THICKNESS: int = 5
 
 class OverlayType(Enum):
+    # In game
     MOVE_TO_LOCATION = 0
     ATTACK_LANE_ENTITY = 1
     STOP_ATTACKING_LANE_ENTITY = 2
@@ -19,6 +21,15 @@ class OverlayType(Enum):
     SELECT_PLAYER = 5
     START_RECALL = 6
     STOP_RECALL = 7
+    BUY_ITEM = 8
+    # Sim control
+    PAUSE = "PAUSE"
+    RESUME = "RESUME"
+    # Game tree
+    UP_TREE = 9
+    DOWN_TREE = 10
+    ADD_NODE = 11
+    RESET_NODE = 12
 
 # Define some colors
 COLORS_BY_TYPE = {
@@ -30,6 +41,15 @@ COLORS_BY_TYPE = {
     OverlayType.STOP_ATTACKING_LANE_ENTITY: (0, 255, 255),
     OverlayType.START_RECALL: (0, 0, 255),
     OverlayType.STOP_RECALL: (0, 0, 255),
+    OverlayType.BUY_ITEM: (0, 255, 0),
+    #
+    OverlayType.PAUSE: (0, 0, 255),
+    OverlayType.RESUME: (0, 255, 0),
+    #
+    OverlayType.UP_TREE: (100, 100, 100),
+    OverlayType.DOWN_TREE: (100, 100, 100),
+    OverlayType.ADD_NODE: (100, 100, 100),
+    OverlayType.RESET_NODE: (100, 100, 100),
 }
 TEXT_BY_TYPE = {
     OverlayType.ATTACK_LANE_ENTITY: "⛏",
@@ -40,16 +60,28 @@ TEXT_BY_TYPE = {
     OverlayType.DISENGAGE_COMBAT: "x⚔",
     OverlayType.START_RECALL: "✨",
     OverlayType.STOP_RECALL: "x✨",
+    OverlayType.BUY_ITEM: "💰",
+    #
+    OverlayType.PAUSE: "❚❚",
+    OverlayType.RESUME: "▶",
+    #
+    OverlayType.UP_TREE: "↑",
+    OverlayType.DOWN_TREE: "↓",
+    OverlayType.ADD_NODE: "➕",
+    OverlayType.RESET_NODE: "↶",
 }
 
-SYMBOL_FONT = pygame.font.Font("seguisym.ttf", 16)
 BOX_SIZE = 25
+DASH_BUTTON_MARGIN = 3
 
 class OverlayItem:
+    next_id = 0
     def __init__(self, position, item_type, callback, name=''):
         self.position = position
         self.type = item_type
         self.callback = callback
+        self.item_id = OverlayItem.next_id
+        OverlayItem.next_id += 1
 
     def render(self, screen):
         raise NotImplementedError
@@ -72,7 +104,7 @@ class Box(OverlayItem):
         color = COLORS_BY_TYPE.get(self.type, BLACK)
         symbol = TEXT_BY_TYPE.get(self.type, "???")
         pygame.draw.rect(screen, color, self.rect)
-        text = SYMBOL_FONT.render(symbol, True, WHITE)
+        text = ACTION_SYMBOL_FONT.render(symbol, True, WHITE)
         screen.blit(text, (self.rect.x, self.rect.y))
 
     def contains_point(self, point):
@@ -91,7 +123,7 @@ class Circle(OverlayItem):
         color = COLORS_BY_TYPE.get(self.type, BLACK)
         symbol = TEXT_BY_TYPE.get(self.type, "???")
         pygame.draw.circle(screen, color, self.position, self.radius)
-        text = SYMBOL_FONT.render(symbol, True, WHITE)
+        text = ACTION_SYMBOL_FONT.render(symbol, True, WHITE)
         text_rect = text.get_rect(center=self.position)
         screen.blit(text, text_rect)
 
@@ -110,22 +142,22 @@ class Consolidation:
 class OverlayManager:
     def __init__(self):
         self.items = []
+        self.dash_start_y = DASH_START_Y
+        self.current_dash_x = DASH_PADDING
+
+    def get_dash_pos_and_increment(self, size):
+        curr = self.current_dash_x
+        self.current_dash_x += size + DASH_BUTTON_MARGIN
+        return (curr, self.dash_start_y + DASH_SEPARATOR_THICKNESS + DASH_PADDING)
 
     def add_box(self, position, item_type, callback, name='', size=BOX_SIZE):
+        if position == "on_dash":
+            position = self.get_dash_pos_and_increment(size)
         box = Box(position, size, item_type, callback, name)
         self.items.append(box)
 
     def add_multiple_boxes(self, center_pos, types_and_callbacks, size=BOX_SIZE, padding=3):
-        """
-        Adds multiple boxes evenly spaced around the center_pos.
-
-        Args:
-            center_pos (tuple): (x, y) center position
-            size (tuple): (width, height) size of each box
-            item_types (list): list of item_type strings for each box
-            callbacks (list): list of callback functions for each box
-            padding (int): space between boxes
-        """
+        """types_and_callbacks is a list of pairs of overlay types and callbacks"""
         count = len(types_and_callbacks)
         if count == 0:
             return  # no boxes to add
@@ -147,6 +179,11 @@ class OverlayManager:
         circle = Circle(position, radius, item_type, callback, name)
         self.items.append(circle)
 
+    def render_additional_dash_info(self, screen, info: list[str]):
+        for i, info_line in enumerate(info):
+            text = INFO_FONT.render(info_line, True, BLACK)
+            screen.blit(text, (SCREEN_X - 200, self.dash_start_y + DASH_SEPARATOR_THICKNESS + 5 + i * 6))
+
     def handle_click(self, point):
         for item in reversed(self.items):
             if item.contains_point(point):
@@ -158,10 +195,13 @@ class OverlayManager:
     def clear(self):
         """Clear all overlays"""
         self.items = []
+        self.current_dash_x = DASH_PADDING
 
-    def render_all(self, screen):
+    def render_all(self, screen, additional_dash_info: list[str]):
+        pygame.draw.line(screen, BLACK, (0, self.dash_start_y), (SCREEN_X, self.dash_start_y), DASH_SEPARATOR_THICKNESS)
         for item in self.items:
             item.render(screen)
+        self.render_additional_dash_info(screen, additional_dash_info)
     
     def consolidate(self):
         """
@@ -170,9 +210,16 @@ class OverlayManager:
         """
         all_types_consolidations = {}
 
-        for box in self.items:
-            if not isinstance(box, Box):
-                continue  # only process Box instances
+        to_consolidate = []
+        to_skip = []
+
+        for item in self.items:
+            if not isinstance(item, Box) or item.type in [OverlayType.UP_TREE, OverlayType.DOWN_TREE, OverlayType.ADD_NODE]:
+                to_skip.append(item)
+            else:
+                to_consolidate.append(item)
+
+        for box in to_consolidate:
             
             action_type = box.type
             if action_type not in all_types_consolidations:
@@ -200,7 +247,7 @@ class OverlayManager:
                 })
 
         # After grouping, create new consolidated boxes
-        new_items = []
+        consolidated = []
         for action_type, consolidations in all_types_consolidations.items():
             for consolidation in consolidations:
                 boxes_in_group = consolidation['boxes']
@@ -212,7 +259,7 @@ class OverlayManager:
                         b.callback(pos)
 
                 new_box = Box(mean_position, BOX_SIZE, action_type, combined_callback, name="Combined box")
-                new_items.append(new_box)
+                consolidated.append(new_box)
                 #print(f"combined {[repr(b) for b in boxes_in_group]} into {repr(new_box)}")
 
-        self.items = new_items + [item for item in self.items if not isinstance(item, Box)]
+        self.items = consolidated + to_skip
