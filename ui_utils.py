@@ -1,53 +1,95 @@
 from typing import Tuple
 
 import pygame
-from CONSTANTS import COMBAT_THRESHOLD
-from entity import Team
+from CONSTANTS import COMBAT_START_THRESHOLD, MAP_Y, PRESENCE_THRESHOLD, RECALL_TIME
+from entity import Entity, Team, Wave
 from lane import SingleLaneSimulator, WaveWrapper
+from player import Player
 from sim import Map
+
+pygame.init()
 
 
 WAVE_SIZE = 7
 PLAYER_SIZE = 11
 TURRET_SIZE = 15
+
 blue_team_color = (100,95,150)
 red_team_color = (150,95,100)
 combat_color = (255,100,255)
+recall_color = (0,0,255)
+health_bar_color = (255,0,0)
+presence_radius_color = (0,255,0)
 disengaging_combat_color = (200,200,200)
 
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+
+ACTION_SYMBOL_FONT = pygame.font.Font("seguisym.ttf", 16)
+INFO_FONT = pygame.font.SysFont(None, 12)
+
+WAVE_SYMBOL = pygame.font.Font("seguisym.ttf", WAVE_SIZE * 2).render("♟", True, BLACK)
+PLAYER_SYMBOL = pygame.font.Font("seguisym.ttf", PLAYER_SIZE * 2).render("♛", True, BLACK)
+TURRET_SYMBOL = pygame.font.Font("seguisym.ttf", TURRET_SIZE * 2).render("♜", True, BLACK)
+BASE_SYMBOL = pygame.font.Font("seguisym.ttf", 32).render("♚", True, BLACK)
+
+
 def coord2screen(pos) -> Tuple[float, float]:
-  x, y = pos
-  return x, y + 250
+    x, y = pos
+    return x, y + int(MAP_Y // 2)
 
 def screen2coord(pos) -> Tuple[float, float]:
-  x, y = pos
-  return x, y - 250
+    x, y = pos
+    return x, y - int(MAP_Y // 2)
+
+def draw_resource_bar(screen, color, ent_x, ent_y, ent_size, proportion, index=0):
+    bar_len = proportion * ent_size * 2
+    bar_x = ent_x - ent_size
+    bar_y = ent_y - ent_size - 5 - index * 3
+    pygame.draw.line(screen, color, (bar_x, bar_y), (bar_x + bar_len, bar_y), 2)
+    
+    # font = pygame.font.SysFont(None, 12)
+    # text = font.render(f"{int(proportion * 100)}%", True, BLACK)
+    # screen.blit(text, (ent_x - ent_size, bar_y - 9))
 
 def renderLane(lane: SingleLaneSimulator, screen):
     for wrapper in lane.get_all_wrappers():
-        ent_size = WAVE_SIZE if isinstance(wrapper, WaveWrapper) else TURRET_SIZE
-        ent_x, ent_y = coord2screen(wrapper.entity.position)
-        health_y = ent_y - ent_size - 5
-        health_len = wrapper.entity.health / wrapper.entity.max_health * ent_size
-        color_to_use = blue_team_color if wrapper.entity.team == Team.BLUE else red_team_color
-        pygame.draw.circle(screen,color_to_use, (ent_x, ent_y), float(ent_size))
-        pygame.draw.line(screen, blue_team_color, (ent_x - ent_size, health_y), (ent_x + health_len, health_y), 3)
+        draw_entity_base(wrapper.entity, screen)
+
+def draw_entity_base(entity: Entity, screen):
+        ent_size = PLAYER_SIZE if isinstance(entity, Player) else (WAVE_SIZE if isinstance(entity, Wave) else TURRET_SIZE)
+        ent_x, ent_y = coord2screen(entity.position)
+        color_to_use = blue_team_color if entity.team == Team.BLUE else red_team_color
+        symbol_to_use = PLAYER_SYMBOL if isinstance(entity, Player) else (WAVE_SYMBOL if isinstance(entity, Wave) else TURRET_SYMBOL)
+        pygame.draw.circle(screen, color_to_use, (ent_x, ent_y), float(ent_size))
+        symbol_rect = symbol_to_use.get_rect(center=(ent_x, ent_y))
+        screen.blit(symbol_to_use, symbol_rect)
+        draw_resource_bar(screen, health_bar_color, ent_x, ent_y, ent_size, entity.get_health() / entity.get_max_health())
+        return ent_x, ent_y, ent_size
+
 
 def renderState(map: Map, screen):
-  for lane in map.lanes.lanes:
+    for lane in map.lanes.lanes:
       renderLane(map.lanes.lanes[lane], screen)
-  
-  for player in map.get_players():
-    if not player.is_alive():
-      continue
-    ent_size = PLAYER_SIZE
-    ent_x, ent_y = coord2screen(player.position)
-    health_y = ent_y - ent_size - 5
-    health_len = player.health / player.max_health * ent_size
-    color_to_use = blue_team_color if player.team == Team.BLUE else red_team_color
-    pygame.draw.circle(screen,color_to_use, (ent_x, ent_y), float(ent_size))
-    pygame.draw.line(screen, blue_team_color, (ent_x - ent_size, health_y), (ent_x + health_len, health_y), 3)
-  
-  for combat in map.combats:
-    c = coord2screen(combat.position)
-    pygame.draw.circle(screen, combat_color if not combat.disengage_counter else disengaging_combat_color, c, float(COMBAT_THRESHOLD), 4)
+
+    for player in map.get_players():
+        if not player.is_alive():
+            continue
+        
+        ent_x, ent_y, ent_size = draw_entity_base(player, screen)
+
+        pygame.draw.circle(screen, presence_radius_color, (ent_x, ent_y), float(PRESENCE_THRESHOLD), 1) # presence radius
+        if player.recall_timer is not None:
+            draw_resource_bar(screen, recall_color, ent_x, ent_y, ent_size, player.recall_timer / RECALL_TIME, index=1)
+    
+        more_info = f"Player <{player.player_id}>"
+        more_info = more_info + "\nitems=" + ", ".join([i.name for i in player.inventory.items])
+        more_info = more_info + f"\ngold={int(player.inventory.gold)}, level={player.stats.leveled.level}"
+        text = INFO_FONT.render(more_info, True, BLACK)
+        screen.blit(text, (ent_x - len(more_info) * 2, ent_y + ent_size + 8))
+
+    for combat in map.combats:
+        c = coord2screen(combat.position)
+        pygame.draw.circle(screen, combat_color if not combat.disengage_counter else disengaging_combat_color, c, float(COMBAT_START_THRESHOLD), 4)
