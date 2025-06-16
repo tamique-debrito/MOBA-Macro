@@ -2,10 +2,11 @@ from time import sleep
 from typing import Optional
 import pygame
 
-from CONSTANTS import MAP_X, SCREEN_X, SCREEN_Y
+from MAP_CONSTANTS import SCREEN_Y
+from MAP_CONSTANTS import MAP_X, SCREEN_X
 from controller import ActionEntry, ActionType, Controller, DisplayLocationType, InputAction
 from entity import Team
-from CONSTANTS import MAP_Y
+from MAP_CONSTANTS import MAP_Y
 from game_tree import GameTree, GameTreeAction, GameTreeActionType
 from overlay_manager import OverlayManager, OverlayType
 from player import Player
@@ -126,7 +127,6 @@ class UI:
         if not self.paused:
             self.controller.sim.step()
 
-        self.screen.fill(WHITE)
         renderState(self.controller.sim.map, self.screen)
         self.overlay_manager.render_all(self.screen, [
             f"Sim step = {self.controller.sim.sim_step}",

@@ -2,7 +2,8 @@ from enum import Enum
 import math
 import pygame
 
-from CONSTANTS import DASH_START_Y, MAP_X, SCREEN_X
+from MAP_CONSTANTS import SCREEN_X
+from MAP_CONSTANTS import DASH_START_Y, MAP_X
 from ui_utils import ACTION_SYMBOL_FONT, INFO_FONT
 from ui_utils import BLACK, WHITE, screen2coord
 
