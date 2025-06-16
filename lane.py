@@ -1,15 +1,13 @@
 from __future__ import annotations
 from enum import Enum
 from math import dist
+import random
 from typing import List, Optional, Sequence, Tuple
 
-from CONSTANTS import COMBAT_START_THRESHOLD, MAP_X, MAP_Y, SIM_STEPS_PER_SECOND, WAVE_COMBINE_THRESHOLD
+from CONSTANTS import COMBAT_START_THRESHOLD, SIM_STEPS_PER_SECOND, WAVE_COMBINE_THRESHOLD
+from MAP_CONSTANTS import BOT_LANE_POINTS, MAP_X, MAP_Y, MID_LAND_POINTS, SIDE_LANE_POINTS, TOP_LANE_POINTS, get_tower_points
 from entity import Entity, LaneEntity, Wave, EntityState, Team, Turret, Wave
 from player import Player
-
-FIRST_TOWER_DX, FIRST_TOWER_DY = 25, MAP_Y / 5
-
-SECOND_TOWER_DX, SECOND_TOWER_DY = MAP_X / 3, MAP_Y / 3
 
 WAVE_SPAWN_INTERVAL = 100
 
@@ -21,25 +19,26 @@ class Lane(Enum):
 
 class LaneEntityWrapper:
     entity: LaneEntity
-    attacking: Optional[LaneEntity]
     def __init__(self, entity) -> None:
         self.entity = entity
-        self.attacking = None
 
     def run_attack_step(self, is_damage_tick):
-        assert self.attacking is not None, "Tried to run attack when not attacking"
+        assert self.entity.attacking is not None, "Tried to run attack when not attacking"
         if not is_damage_tick:
             return
-        self.attacking.take_damage(self.entity.get_damage())
+        # if self.entity.attacking.attacking is None:
+        #     return # Do not apply attack if the target is not attacking in lane. This prevents some units from getting an "initiative" via the step order
+
+        self.entity.attacking.take_damage(self.entity.get_damage())
     
     def clear_attacking(self):
-        self.attacking = None
+        self.entity.attacking = None
 
     def set_attacking(self, attacking):
-        if self.attacking is None:
-            self.attacking = attacking
-        elif isinstance(self.attacking, Wave): # If we are already attacking a turret, do not override. This encodes that turrets have higher priority
-            self.attacking = attacking
+        if self.entity.attacking is None:
+            self.entity.attacking = attacking
+        elif isinstance(self.entity.attacking, Wave): # If we are already attacking a turret, do not override. This encodes that turrets have higher priority
+            self.entity.attacking = attacking
 
     def __repr__(self):
         return (f"entity={self.entity})")
@@ -79,7 +78,7 @@ class TurretWrapper(LaneEntityWrapper):
         super().__init__(entity)
 
 class SingleLaneSimulator:
-    def __init__(self, lane_points: List[Tuple[float, float]], players: Sequence[Player], on_remove_callback):
+    def __init__(self, lane_points: Sequence[Tuple[float, float]], players: Sequence[Player], on_remove_callback):
         self.players = players
         self.points = lane_points
         self.on_remove_callback = on_remove_callback
@@ -181,7 +180,7 @@ class SingleLaneSimulator:
                     w2.set_attacking(w1.entity)
         for w in self.get_all_wrappers():
             # If any lane entities are not attacking and can attack a player, they should
-            if w.attacking is not None:
+            if w.entity.attacking is not None:
                 continue
             for player in self.players:
                 if player.team == w.entity.team.enemy() and w.entity.distance_to_entity(player) <= COMBAT_START_THRESHOLD:
@@ -194,13 +193,14 @@ class SingleLaneSimulator:
         self.combine_waves(sim_step)
         self.set_attacking()
 
-        for wrapper in self.get_all_wrappers():
+        wrappers = self.get_all_wrappers()
+        for wrapper in random.sample(wrappers, len(wrappers)):
             if wrapper.entity._state == EntityState.COMBAT:
                 continue # Don't process entities that are in regular combat
             if isinstance(wrapper, WaveWrapper) and wrapper.segment_number > self.last_seg_index:
                 #self.waves.remove(wave_wrapper)
                 continue # Don't process waves that have reached the end
-            if wrapper.attacking is not None:
+            if wrapper.entity.attacking is not None:
                 wrapper.run_attack_step(is_damage_tick)
             elif isinstance(wrapper, WaveWrapper):
                 self.move_wave(time_delta, wrapper)
@@ -220,9 +220,9 @@ class LaneSimulator:
     # Simulates all three lanes
     def __init__(self, add_entity_callback, players: Sequence[Player], on_remove_callback):
         self.lanes: dict[Lane, SingleLaneSimulator] = {
-            Lane.TOP: SingleLaneSimulator([ (FIRST_TOWER_DX, FIRST_TOWER_DY), (MAP_X / 2, SECOND_TOWER_DY), (MAP_X - FIRST_TOWER_DX, FIRST_TOWER_DY) ], players, on_remove_callback),
-            Lane.MID: SingleLaneSimulator([ (FIRST_TOWER_DX, 0), (MAP_X - FIRST_TOWER_DX, 0) ], players, on_remove_callback),
-            Lane.BOTTOM: SingleLaneSimulator([ (FIRST_TOWER_DX, -FIRST_TOWER_DY), (MAP_X / 2, -SECOND_TOWER_DY), (MAP_X - FIRST_TOWER_DX, -FIRST_TOWER_DY) ], players, on_remove_callback)
+            Lane.TOP: SingleLaneSimulator(TOP_LANE_POINTS, players, on_remove_callback),
+            Lane.MID: SingleLaneSimulator(MID_LAND_POINTS, players, on_remove_callback),
+            Lane.BOTTOM: SingleLaneSimulator(BOT_LANE_POINTS, players, on_remove_callback)
         }
         self.spawn_interval_sim_steps = WAVE_SPAWN_INTERVAL * SIM_STEPS_PER_SECOND
         self.wave_num = 0
@@ -234,14 +234,14 @@ class LaneSimulator:
     def add_turrets(self):
         turrets = {
             Team.BLUE : {
-                Lane.TOP: [(FIRST_TOWER_DX, FIRST_TOWER_DY), (SECOND_TOWER_DX, SECOND_TOWER_DY)],
-                Lane.MID: [(FIRST_TOWER_DX, 0), (SECOND_TOWER_DX, 0)],
-                Lane.BOTTOM: [(FIRST_TOWER_DX, -FIRST_TOWER_DY), (SECOND_TOWER_DX, -SECOND_TOWER_DY)]
+                Lane.TOP: get_tower_points(1, False),
+                Lane.MID: get_tower_points(0, False),
+                Lane.BOTTOM: get_tower_points(-1, False)
             },
-            Team.RED: { 
-                Lane.TOP: [(MAP_X - FIRST_TOWER_DX, FIRST_TOWER_DY), (MAP_X - SECOND_TOWER_DX, SECOND_TOWER_DY)],
-                Lane.MID: [(MAP_X - FIRST_TOWER_DX, 0), (MAP_X - SECOND_TOWER_DX, 0)],
-                Lane.BOTTOM: [(MAP_X - FIRST_TOWER_DX, -FIRST_TOWER_DY), (MAP_X - SECOND_TOWER_DX, -SECOND_TOWER_DY)],        
+            Team.RED: {
+                Lane.TOP: get_tower_points(1, True),
+                Lane.MID: get_tower_points(0, True),
+                Lane.BOTTOM: get_tower_points(-1, True)   
             }
         }
         for team in turrets:

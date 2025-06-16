@@ -1,4 +1,6 @@
 # Simulator
+
+
 SIM_STEPS_PER_SECOND = 5
 
 # Map Distance Thresholds
@@ -13,6 +15,7 @@ DAMAGE_APPLY_INTERVAL = 1  # time per damage tick in seconds
 DISENGAGE_TIME = 2 # seconds to disengage from combat
 RECALL_TIME = 8 # seconds for player to recall to spawn point
 RESPAWN_TIME = 10 # How many seconds before player respawn
+VISION_RECALCULATE_PERIOD = 1 # seconds between vision recalculation
 
 # Misc.
 PLAYER_ATTACK_MISS_PROBABILITY = 0.2
@@ -21,12 +24,3 @@ DEFAULT_WAVE_REWARD: int = 100
 TURRET_REWARD: int = 500
 
 
-# Dimensions
-MAP_X: int = 750
-MAP_Y: int = 750
-
-DASH_START_Y: int = MAP_Y
-DASH_HEIGHT: int = 100
-
-SCREEN_X: int = MAP_X
-SCREEN_Y: int = MAP_Y + DASH_HEIGHT
