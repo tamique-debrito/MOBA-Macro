@@ -2,7 +2,7 @@ from typing import Tuple
 
 import pygame
 from CONSTANTS import COMBAT_START_THRESHOLD, PRESENCE_THRESHOLD, RECALL_TIME
-from MAP_CONSTANTS import BASE_CIRCLES, GET_MAP_LANE_POLYGONS, MAP_Y, SCREEN_X, SCREEN_Y
+from MAP_CONSTANTS import BASE_CIRCLES, MAP_LANE_POLYGONS, MAP_Y, SCREEN_X, SCREEN_Y, WATER_ELLIPSES
 from entity import Entity, Team, Wave
 from lane import SingleLaneSimulator, WaveWrapper
 from player import Player
@@ -25,6 +25,7 @@ disengaging_combat_color = (200,200,200)
 
 map_background_color = (150, 205, 150)
 map_path_color = (250, 255, 150)
+map_water_color = (150, 155, 250)
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -43,14 +44,19 @@ MAP_BACKGROUND = pygame.Surface((SCREEN_X, SCREEN_Y))
 MAP_BACKGROUND.fill(map_background_color)
 
 def init_map_bg():
-    for poly in GET_MAP_LANE_POLYGONS():
+    for poly in MAP_LANE_POLYGONS:
         mapped_poly = [coord2screen(p) for p in poly]
         pygame.draw.polygon(MAP_BACKGROUND, map_path_color, mapped_poly)
 
-    for base_circle in BASE_CIRCLES:
-        c = coord2screen(base_circle[0])
-        r = base_circle[1]
+    for water_ellipse in BASE_CIRCLES:
+        c = coord2screen(water_ellipse[0])
+        r = water_ellipse[1]
         pygame.draw.circle(MAP_BACKGROUND, map_path_color, center=c, radius=r)
+
+    for water_ellipse in WATER_ELLIPSES:
+        (t, l), (w, h) = water_ellipse
+        t, l = coord2screen((t, l))
+        pygame.draw.ellipse(MAP_BACKGROUND, map_water_color, (t, l, w, h))
 
 
 def coord2screen(pos) -> Tuple[float, float]:

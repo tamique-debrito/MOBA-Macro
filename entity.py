@@ -155,5 +155,4 @@ class Turret(Entity):
         stats = GET_DEFAULT_TURRET_STATS()
         return Turret(pos, stats, team)
 
-
 LaneEntity = Union[Turret, Wave]

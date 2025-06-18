@@ -38,11 +38,16 @@ def get_tower_points(y_sign, from_end):
 
 HALF_PATH_WIDTH = 35
 
-def GET_MAP_LANE_POLYGONS():
-    return [
-        [(p[0], p[1] + HALF_PATH_WIDTH) for p in points] + [(p[0], p[1] - HALF_PATH_WIDTH) for p in reversed(points)] for points in [TOP_LANE_POINTS, MID_LAND_POINTS, BOT_LANE_POINTS]
-    ]
+MAP_LANE_POLYGONS = [
+    [(p[0], p[1] + HALF_PATH_WIDTH) for p in points] + [(p[0], p[1] - HALF_PATH_WIDTH) for p in reversed(points)] for points in [TOP_LANE_POINTS, MID_LAND_POINTS, BOT_LANE_POINTS]
+]
 
 
 BASE_CIRCLE_RADIUS = 175
+WATER_CIRCLE_Y_RADIUS = THIRD_TOWER_DY // 3
+WATER_CIRCLE_X_RADIUS = WATER_CIRCLE_Y_RADIUS // 3
+WATER_CIRCLE_DY = THIRD_TOWER_DY // 2
+def get_water_circle_point(top_bot_lane_sgn):
+    return (MAP_HALF_X - WATER_CIRCLE_X_RADIUS, top_bot_lane_sgn * WATER_CIRCLE_DY - WATER_CIRCLE_Y_RADIUS), (WATER_CIRCLE_X_RADIUS * 2,  WATER_CIRCLE_Y_RADIUS * 2)
 BASE_CIRCLES = [((0, 0), BASE_CIRCLE_RADIUS), ((MAP_X, 0), BASE_CIRCLE_RADIUS)]
+WATER_ELLIPSES = [get_water_circle_point(1), get_water_circle_point(-1)]
