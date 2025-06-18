@@ -1,7 +1,8 @@
 from typing import Tuple
 
 import pygame
-from CONSTANTS import COMBAT_START_THRESHOLD, MAP_Y, PRESENCE_THRESHOLD, RECALL_TIME
+from CONSTANTS import COMBAT_START_THRESHOLD, PRESENCE_THRESHOLD, RECALL_TIME
+from MAP_CONSTANTS import BASE_CIRCLES, GET_MAP_LANE_POLYGONS, MAP_Y, SCREEN_X, SCREEN_Y
 from entity import Entity, Team, Wave
 from lane import SingleLaneSimulator, WaveWrapper
 from player import Player
@@ -11,7 +12,7 @@ pygame.init()
 
 
 WAVE_SIZE = 7
-PLAYER_SIZE = 11
+PLAYER_SIZE = 10
 TURRET_SIZE = 15
 
 blue_team_color = (100,95,150)
@@ -21,6 +22,9 @@ recall_color = (0,0,255)
 health_bar_color = (255,0,0)
 presence_radius_color = (0,255,0)
 disengaging_combat_color = (200,200,200)
+
+map_background_color = (150, 205, 150)
+map_path_color = (250, 255, 150)
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -34,6 +38,19 @@ WAVE_SYMBOL = pygame.font.Font("seguisym.ttf", WAVE_SIZE * 2).render("♟", True
 PLAYER_SYMBOL = pygame.font.Font("seguisym.ttf", PLAYER_SIZE * 2).render("♛", True, BLACK)
 TURRET_SYMBOL = pygame.font.Font("seguisym.ttf", TURRET_SIZE * 2).render("♜", True, BLACK)
 BASE_SYMBOL = pygame.font.Font("seguisym.ttf", 32).render("♚", True, BLACK)
+
+MAP_BACKGROUND = pygame.Surface((SCREEN_X, SCREEN_Y))
+MAP_BACKGROUND.fill(map_background_color)
+
+def init_map_bg():
+    for poly in GET_MAP_LANE_POLYGONS():
+        mapped_poly = [coord2screen(p) for p in poly]
+        pygame.draw.polygon(MAP_BACKGROUND, map_path_color, mapped_poly)
+
+    for base_circle in BASE_CIRCLES:
+        c = coord2screen(base_circle[0])
+        r = base_circle[1]
+        pygame.draw.circle(MAP_BACKGROUND, map_path_color, center=c, radius=r)
 
 
 def coord2screen(pos) -> Tuple[float, float]:
@@ -64,6 +81,7 @@ def draw_entity_base(entity: Entity, screen):
         color_to_use = blue_team_color if entity.team == Team.BLUE else red_team_color
         symbol_to_use = PLAYER_SYMBOL if isinstance(entity, Player) else (WAVE_SYMBOL if isinstance(entity, Wave) else TURRET_SYMBOL)
         pygame.draw.circle(screen, color_to_use, (ent_x, ent_y), float(ent_size))
+        pygame.draw.circle(screen, BLACK, (ent_x, ent_y), float(ent_size) + 2, 3)
         symbol_rect = symbol_to_use.get_rect(center=(ent_x, ent_y))
         screen.blit(symbol_to_use, symbol_rect)
         draw_resource_bar(screen, health_bar_color, ent_x, ent_y, ent_size, entity.get_health() / entity.get_max_health())
@@ -71,6 +89,7 @@ def draw_entity_base(entity: Entity, screen):
 
 
 def renderState(map: Map, screen):
+    screen.blit(MAP_BACKGROUND, (0, 0))
     for lane in map.lanes.lanes:
       renderLane(map.lanes.lanes[lane], screen)
 
@@ -93,3 +112,5 @@ def renderState(map: Map, screen):
     for combat in map.combats:
         c = coord2screen(combat.position)
         pygame.draw.circle(screen, combat_color if not combat.disengage_counter else disengaging_combat_color, c, float(COMBAT_START_THRESHOLD), 4)
+
+init_map_bg()
