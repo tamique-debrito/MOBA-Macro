@@ -7,4 +7,5 @@ Currently it supports:
    - Playing/pausing the simulation
 
 
-![Illustration](illustration.png)
+![image](https://github.com/user-attachments/assets/8d47c090-7c48-4cb4-adb1-fb0e9e26a3a3)
+
